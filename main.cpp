@@ -1,17 +1,138 @@
 ﻿#include <iostream>
 #include <ctime>
 #include <map>
-#include <graphics.h>
-#include <easyx.h>
-#include <conio.h>
-#include <windows.h>
 #include <vector>
 #include <sstream>
 #include <iomanip>
 #include <string>
-#include <wchar.h>
 #include <fstream>  // 用于文件操作
-#include <algorithm> 
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
+
+// Cross-platform compatibility definitions
+#ifdef _WIN32
+    #include <graphics.h>
+    #include <easyx.h>
+    #include <conio.h>
+    #include <windows.h>
+#else
+    // Stub definitions for non-Windows platforms
+    typedef unsigned int COLORREF;
+    struct IMAGE { 
+        int width, height; 
+        IMAGE(int w = 0, int h = 0) : width(w), height(h) {}
+        int getwidth() const { return width; }
+        int getheight() const { return height; }
+    };
+    
+    #define RGB(r,g,b) ((COLORREF)(((unsigned char)(r)|((unsigned short)((unsigned char)(g))<<8))|(((unsigned int)(unsigned char)(b))<<16)))
+    #define WHITE RGB(255,255,255)
+    #define BLACK RGB(0,0,0)
+    #define DARKGRAY RGB(64,64,64)
+    #define TRANSPARENT 1
+    #define SRCPAINT 1
+    
+    #define WM_LBUTTONDOWN 0x0201
+    #define WM_RBUTTONDOWN 0x0204
+    #define VK_UP 0x26
+    #define VK_DOWN 0x28
+    #define VK_LEFT 0x25
+    #define VK_RIGHT 0x27
+    #define VK_RETURN 0x0D
+    #define VK_SPACE 0x20
+    #define EW_SHOWCONSOLE 1
+    
+    struct ExMessage {
+        unsigned int message;
+        int x, y;
+    };
+    
+    // Stub function declarations
+    void initgraph(int width, int height, int flag = 0) {}
+    void closegraph() {}
+    void cleardevice() {}
+    void setfillcolor(COLORREF color) {}
+    void solidrectangle(int left, int top, int right, int bottom) {}
+    void setbkmode(int mode) {}
+    void settextcolor(COLORREF color) {}
+    void settextstyle(int height, int width, const wchar_t* typeface) {}
+    int textwidth(const wchar_t* text) { return wcslen(text) * 8; }
+    int textheight(const wchar_t* text) { return 16; }
+    void outtextxy(int x, int y, const wchar_t* text) {}
+    void putimage(int x, int y, IMAGE* img, int flag = 0) {}
+    void loadimage(IMAGE* img, const wchar_t* filename, int width = 0, int height = 0) {}
+    void SetWorkingImage(IMAGE* img) {}
+    bool peekmessage(ExMessage* msg, int filter = 0, bool removemsg = true) { return false; }
+    short GetKeyState(int vkey) { return 0; }
+    int MessageBox(void* hwnd, const wchar_t* text, const wchar_t* caption, unsigned int type) { return 0; }
+    void setlinecolor(COLORREF color) {}
+    void line(int x1, int y1, int x2, int y2) {}
+    void BeginBatchDraw() {}
+    void EndBatchDraw() {}
+    void FlushBatchDraw() {}
+    
+    #define MB_OK 0
+    #define MB_OKCANCEL 1
+    #define MB_ICONWARNING 0x30
+    #define IDOK 1
+    #define EM_MOUSE 1
+    #define RED RGB(255,0,0)
+    
+    struct MOUSEMSG {
+        unsigned int uMsg;
+        int x, y;
+    };
+    
+    void rectangle(int left, int top, int right, int bottom) {}
+    bool MouseHit() { return false; }
+    MOUSEMSG GetMouseMsg() { MOUSEMSG msg = {0}; return msg; }
+    void Sleep(int ms) { 
+        usleep(ms * 1000); 
+    }
+    int _wtoi(const wchar_t* str) { return wcstol(str, nullptr, 10); }
+    short GetAsyncKeyState(int vkey) { return 0; }
+    void fillrectangle(int left, int top, int right, int bottom) {}
+    void drawtext(const wchar_t* text, void* rect, int format) {}
+    
+    #define VK_BACK 0x08
+    #define VK_TAB 0x09
+    #define DT_LEFT 0
+    #define DT_VCENTER 0
+    #define DT_SINGLELINE 0
+    
+    struct RECT {
+        int left, top, right, bottom;
+    };
+    
+    // Add missing _T macro
+    #define _T(x) L##x
+    
+    // Cross-platform swprintf_s replacement
+    #define swprintf_s(buffer, format, ...) swprintf(buffer, sizeof(buffer)/sizeof(buffer[0]), format, ##__VA_ARGS__)
+#endif
+
+// Helper functions for cross-platform file operations
+#ifndef _WIN32
+std::string wstring_to_string(const std::wstring& wstr) {
+    std::string str;
+    str.reserve(wstr.length());
+    for (wchar_t wc : wstr) {
+        str.push_back(static_cast<char>(wc));
+    }
+    return str;
+}
+
+std::wstring string_to_wstring(const std::string& str) {
+    std::wstring wstr;
+    wstr.reserve(str.length());
+    for (char c : str) {
+        wstr.push_back(static_cast<wchar_t>(c));
+    }
+    return wstr;
+}
+#endif 
 
 
 #define ImgSize 40
@@ -454,11 +575,18 @@ private:
 
     // 从文件加载最佳时间
     void loadBestTime() {
+#ifdef _WIN32
         std::wifstream inFile(getDifficultyFileName());
-
         if (inFile) {
             std::wstring line;
             while (std::getline(inFile, line)) {
+#else
+        std::ifstream inFile(wstring_to_string(getDifficultyFileName()));
+        if (inFile) {
+            std::string line_str;
+            while (std::getline(inFile, line_str)) {
+                std::wstring line = string_to_wstring(line_str);
+#endif
                 // 格式: 账号:难度:时间
                 size_t pos1 = line.find(L':');
                 size_t pos2 = line.find(L':', pos1 + 1);
@@ -490,13 +618,21 @@ private:
     }
     // 保存最佳时间到文件
     void saveBestTimeToFile() {
-        std::wifstream inFile(getDifficultyFileName());
         std::vector<std::wstring> lines;
         bool accountFound = false;
         // 读取现有记录
+#ifdef _WIN32
+        std::wifstream inFile(getDifficultyFileName());
         if (inFile) {
             std::wstring line;
             while (std::getline(inFile, line)) {
+#else
+        std::ifstream inFile(wstring_to_string(getDifficultyFileName()));
+        if (inFile) {
+            std::string line_str;
+            while (std::getline(inFile, line_str)) {
+                std::wstring line = string_to_wstring(line_str);
+#endif
                 size_t pos1 = line.find(L':');
                 size_t pos2 = line.find(L':', pos1 + 1);
                 if (pos1 != std::wstring::npos && pos2 != std::wstring::npos) {
@@ -520,11 +656,19 @@ private:
                 std::to_wstring(Cols) + L":" + std::to_wstring(bestTime));
         }
         // 写回文件
+#ifdef _WIN32
         std::wofstream outFile(getDifficultyFileName());
         if (outFile) {
             for (const auto& line : lines) {
                 outFile << line << std::endl;
             }
+#else
+        std::ofstream outFile(wstring_to_string(getDifficultyFileName()));
+        if (outFile) {
+            for (const auto& line : lines) {
+                outFile << wstring_to_string(line) << std::endl;
+            }
+#endif
             outFile.close();
         }
     }
@@ -1157,10 +1301,18 @@ void showRanking(const std::wstring& filename, const std::wstring& difficultyNam
     // 读取文件内容并排序
     std::vector<std::pair<std::wstring, double>> records;
 
+#ifdef _WIN32
     std::wifstream inFile(filename);
     if (inFile) {
         std::wstring line;
         while (std::getline(inFile, line)) {
+#else
+    std::ifstream inFile(wstring_to_string(filename));
+    if (inFile) {
+        std::string line_str;
+        while (std::getline(inFile, line_str)) {
+            std::wstring line = string_to_wstring(line_str);
+#endif
             size_t pos1 = line.find(L':');
             size_t pos2 = line.find(L':', pos1 + 1);
             if (pos1 != std::wstring::npos && pos2 != std::wstring::npos) {
@@ -1313,6 +1465,7 @@ void drawInputBox(const Inputbox& box, const wchar_t* text, bool isActive) {
 }
 
 bool checkLogin(const wchar_t* account, const wchar_t* password) {
+#ifdef _WIN32
     wifstream inFile("users.txt");
     if (!inFile.is_open()) {
         MessageBox(NULL, _T("用户数据文件不存在"), _T("错误"), MB_OK);
@@ -1321,6 +1474,17 @@ bool checkLogin(const wchar_t* account, const wchar_t* password) {
 
     wstring line;
     while (getline(inFile, line)) {
+#else
+    ifstream inFile("users.txt");
+    if (!inFile.is_open()) {
+        MessageBox(NULL, _T("用户数据文件不存在"), _T("错误"), MB_OK);
+        return false;
+    }
+
+    string line_str;
+    while (getline(inFile, line_str)) {
+        wstring line = string_to_wstring(line_str);
+#endif
         size_t pos = line.find(L':');
         if (pos != wstring::npos) {
             wstring storedAccount = line.substr(0, pos);
@@ -1583,10 +1747,18 @@ void zhuce() {
                     else {
                         // **读取 users.txt 文件，检查是否已存在该账号**
                         bool isAccountExist = false;
+#ifdef _WIN32
                         wifstream inFile("users.txt");
                         if (inFile.is_open()) {
                             wstring line;
                             while (getline(inFile, line)) {
+#else
+                        ifstream inFile("users.txt");
+                        if (inFile.is_open()) {
+                            string line_str;
+                            while (getline(inFile, line_str)) {
+                                wstring line = string_to_wstring(line_str);
+#endif
                                 size_t pos = line.find(L':');
                                 if (pos != wstring::npos) {
                                     wstring storedAccount = line.substr(0, pos);
@@ -1604,9 +1776,15 @@ void zhuce() {
                         }
                         else {
                             // **写入新账号**
+#ifdef _WIN32
                             wofstream outFile("users.txt", ios::app);
                             if (outFile.is_open()) {
                                 outFile << accountText << L":" << passwordText << endl;
+#else
+                            ofstream outFile("users.txt", ios::app);
+                            if (outFile.is_open()) {
+                                outFile << wstring_to_string(accountText) << ":" << wstring_to_string(passwordText) << endl;
+#endif
                                 outFile.close();
                                 MessageBox(NULL, _T("注册成功"), _T("提示"), MB_OK);
                                 EndBatchDraw();
@@ -1896,4 +2074,15 @@ void showOperationModeSelection() {
         }
         Sleep(10);
     }
+}
+
+// Missing function implementations
+void showGameInstructions() {
+    // Stub implementation for game instructions
+    MessageBox(NULL, _T("游戏说明：\n1. 左键点击翻开格子\n2. 右键标记地雷\n3. 翻开所有非地雷格子获胜"), _T("游戏说明"), MB_OK);
+}
+
+void showGameControls() {
+    // Stub implementation for game controls
+    MessageBox(NULL, _T("操作说明：\n鼠标模式：左键翻开，右键标记\n键盘模式：方向键移动，回车翻开，空格标记"), _T("操作说明"), MB_OK);
 }
