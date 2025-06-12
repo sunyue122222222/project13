@@ -1,0 +1,34 @@
+# Compiled binaries
+*.o
+*.exe
+six_bar_mechanism
+advanced_mechanism
+fixed_mechanism
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Lost+found directory
+lost+found/
+
+# Project specific temporary directories
+project*/
